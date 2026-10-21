@@ -72,7 +72,7 @@ class LLMClient:
         user_prompt: str,
         temperature: float = 0.2,
         max_tokens: int = 1500,
-        max_retries: int = 4,
+        max_retries: int = 10,
     ) -> str:
         start_time = time.perf_counter()
         raw_response = ""
@@ -99,7 +99,7 @@ class LLMClient:
                 break
             except Exception as e:
                 last_error = e
-                wait_secs = (2 ** attempt) + 1.0
+                wait_secs = min(60.0, 2.0 ** attempt) + 1.0
                 print(f"    [Retry {attempt + 1}/{max_retries}] API error ({self.provider}): {e}. Waiting {wait_secs:.1f}s...")
                 time.sleep(wait_secs)
         else:
@@ -656,11 +656,29 @@ def main() -> int:
     non_failures_count = 0
     validation_errors = 0
 
+    progress_path = Path(args.output).with_suffix(".progress.jsonl")
+    done_records: dict[str, dict] = {}
+    if progress_path.exists():
+        for line in progress_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                rec_done = json.loads(line)
+                done_records[rec_done["trajectory_id"]] = rec_done
+        print(f" Resuming: {len(done_records)} cases already completed ({progress_path.name})")
+
     for record in target_records:
-        raw_ref_name = record["raw_source_ref"].split("#")[-1]
-        raw_case = raw_cases_by_name.get(raw_ref_name, {})
-        executed_rec, conf = execute_trajectory(client, record, raw_case, toolkits_by_name, max_turns=args.max_turns, delay_between_calls=args.delay)
-        confidences.append(conf)
+        if record["trajectory_id"] in done_records:
+            executed_rec = done_records[record["trajectory_id"]]
+        else:
+            raw_ref_name = record["raw_source_ref"].split("#")[-1]
+            raw_case = raw_cases_by_name.get(raw_ref_name, {})
+            try:
+                executed_rec, conf = execute_trajectory(client, record, raw_case, toolkits_by_name, max_turns=args.max_turns, delay_between_calls=args.delay)
+            except Exception as e:
+                print(f"  [SKIPPED] {record['trajectory_id']} failed: {e}")
+                continue
+            confidences.append(conf)
+            with progress_path.open("a", encoding="utf-8") as pf:
+                pf.write(json.dumps(executed_rec, ensure_ascii=False) + "\n")
 
         # Validate against schema
         errs = validate_record(executed_rec, schema)
