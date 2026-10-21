@@ -662,6 +662,7 @@ def main() -> int:
     parser.add_argument("--input", default=str(NORMALIZED_FILE), help="Input normalized JSONL file")
     parser.add_argument("--output", default=str(OUTPUT_FILE), help="Output executed JSONL file")
     parser.add_argument("--audit", default=str(AUDIT_FILE), help="Output audit JSONL file")
+    parser.add_argument("--force", action="store_true", help="Overwrite existing output file")
     args = parser.parse_args()
 
     provider = args.provider
@@ -756,6 +757,11 @@ def main() -> int:
     # Write output JSONL
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    if out_path.exists() and not args.force:
+        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_path = out_path.with_name(f"{out_path.stem}_{stamp}{out_path.suffix}")
+        print(f"[!] Output exists, writing to {out_path} instead")
+        
     with out_path.open("w", encoding="utf-8") as f:
         for r in executed_records:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")

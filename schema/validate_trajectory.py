@@ -61,3 +61,18 @@ def validate_record(record: dict, schema: dict) -> list[str]:
     errors: list[str] = []
     _validate(record, schema, "$", errors)
     return errors
+
+
+if __name__ == "__main__":
+    import sys
+    schema = load_schema(Path(__file__).parent / "trajectory_schema.json")
+    bad = 0
+    for path in sys.argv[1:]:
+        for i, line in enumerate(open(path, encoding="utf-8"), 1):
+            if line.strip():
+                errs = validate_record(json.loads(line), schema)
+                if errs:
+                    bad += 1
+                    print(f"{path}:{i}: {errs}")
+    print(f"{bad} invalid record(s)")
+    sys.exit(1 if bad else 0)

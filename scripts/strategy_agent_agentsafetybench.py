@@ -604,6 +604,7 @@ def main() -> int:
     parser.add_argument("--provider", default=None, choices=["gemini", "google", "openai", "mock"], help="LLM Provider")
     parser.add_argument("--model", default=None, help="LLM Model Name")
     parser.add_argument("--mock", action="store_true", help="Force deterministic simulation mode")
+    parser.add_argument("--force", action="store_true", help="Overwrite existing output file")
     args = parser.parse_args()
 
     provider = args.provider
@@ -652,8 +653,13 @@ def main() -> int:
         executed_records.append(rec)
         handling_counts[rec["ambiguity_score"]["ambiguity_handling"]] += 1
 
-    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with OUTPUT_FILE.open("w", encoding="utf-8") as f:
+    out_path = OUTPUT_FILE
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if out_path.exists() and not args.force:
+        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_path = out_path.with_name(f"{out_path.stem}_{stamp}{out_path.suffix}")
+        print(f"[!] Output exists, writing to {out_path} instead")
+    with out_path.open("w", encoding="utf-8") as f:
         for r in executed_records:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
