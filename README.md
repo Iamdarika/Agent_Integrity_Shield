@@ -10,7 +10,8 @@ ais/
 ├── data/raw/agentsafetybench/     # Official Agent-SafetyBench release & provenance
 ├── data/processed/                # Normalized, strategy-executed, and interactive JSONL outputs
 │   ├── toolemu_normalized.jsonl               # 43 domain-filtered ToolEmu scenarios
-│   ├── toolemu_executed.jsonl                 # 43 executed ToolEmu trajectories
+│   ├── toolemu_executed.jsonl                 # 5-case pilot run
+│   ├── toolemu_executed_full.jsonl            # 43 executed ToolEmu trajectories
 │   ├── strategy_scenarios_executed.jsonl      # 15 graduated-policy constraint scenarios
 │   ├── agentsafetybench_normalized.jsonl      # 116 domain-filtered Agent-SafetyBench scenarios
 │   ├── agentsafetybench_executed.jsonl        # Executed Agent-SafetyBench trajectories
@@ -29,7 +30,11 @@ ais/
     ├── preprocess_agentsafetybench.py         # Agent-SafetyBench domain normalization
     ├── generate_trajectories_agentsafetybench.py # Agent-SafetyBench simulation harness
     ├── strategy_agent_agentsafetybench.py     # Agent-SafetyBench strategy agent
-    └── toolemu_interactive_agent.py           # Interactive CLI with auto-domain classifier
+    ├── interactive_agent_comb.py              # Interactive CLI with auto-domain classifier
+    ├── recovery_engine.py                     # AIS guard: rule-based pre/post checks, offline replay eval
+    ├── test_engine_fixes.py                   # Regression checks for the engine rules
+    ├── run_guarded_toolemu.py                 # Phase 2: guard inside the agent loop (baseline vs guarded)
+    └── compare_guarded.py                     # Phase 2: paired safety + utility comparison
 ```
 
 ---
@@ -95,7 +100,7 @@ python scripts/strategy_agent_agentsafetybench.py --limit 15
 ### 4. Interactive Agent CLI (Live User Prompting)
 Allows users to input arbitrary tasks in natural language at runtime:
 ```powershell
-python scripts/toolemu_interactive_agent.py
+python scripts/interactive_agent_comb.py
 ```
 **Interactive Features:**
 - **Automatic Domain Detection:** Fast LLM classifier routes prompt to `financial_transactions`, `file_operations`, or `communication`.
@@ -103,6 +108,23 @@ python scripts/toolemu_interactive_agent.py
 - **Human-in-the-Loop Clarification:** When a prompt is ambiguous or lacks required parameters, the agent asks you follow-up questions live in the terminal.
 - **Zero Dataset Re-runs:** References pre-executed dataset runs in memory (~1ms) without re-running past cases.
 - **Cross-Benchmark Comparison:** Automatically matches and displays the closest benchmark scenario from ToolEmu and Agent-SafetyBench for side-by-side analysis.
+
+---
+
+### 5. Recovery Engine (AIS guard)
+```powershell
+# Offline: replay recorded trajectories through the guard (zero API calls)
+python scripts/recovery_engine.py
+python scripts/test_engine_fixes.py
+
+# Phase 2: guard runs live inside the agent loop. Always dry-run first (zero API calls).
+python scripts/run_guarded_toolemu.py --mode both --limit 6 --dry-run
+python scripts/run_guarded_toolemu.py --mode both --all --max-calls 600
+python scripts/compare_guarded.py
+
+# Schema check for any output file
+python schema/validate_trajectory.py data/processed/toolemu_executed_full.jsonl
+```
 
 ---
 
