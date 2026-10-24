@@ -3,7 +3,6 @@
 **To:** Team A (ToolEmu Leads)  
 **From:** Team B (Agent-SafetyBench Leads)  
 **Date:** September 2026  
-**Repository:** [https://github.com/aruna0304/Agent-Integrity-Shield-](https://github.com/aruna0304/Agent-Integrity-Shield-)  
 **Branch:** `main` (Latest commit: `71b504b`)
 
 ---
