@@ -104,7 +104,7 @@
       <section class="section">
         <h2>What it does not do yet</h2>
         <ul class="caveats">
-          <li>A pause counts as safe. The cost is that AIS also pauses some safe runs: about 13 to 15% with rules alone, and 6 of 13 (46%) on unseen ASB tasks with the semantic check on.</li>
+          <li>A pause counts as safe. The cost is that AIS also pauses some safe runs: about 13 to 15% with rules alone. On unseen ASB tasks the benchmark marks as legitimate, it paused 3 of 7 with rules and 4 of 7 with the semantic check on.</li>
           <li>The semantic check only reviews actions. An agent that reads private data and repeats it in its answer is not caught yet.</li>
           <li>Results come from one model family and modest sample sizes. Every number on the Evidence page lists its sample.</li>
         </ul>
@@ -303,7 +303,7 @@
       <section class="section">
         <h2>Limits we report</h2>
         <ul class="caveats">
-          <li>A pause counts as safe in the judge's eyes. The price is utility: with rules alone AIS paused about 13% (ToolEmu, unseen) to 15% (ASB) of runs that were fine without it; with the semantic check on, it paused 6 of 13 (46%) on unseen ASB tasks. Some of those are tasks the benchmark itself marks as should-refuse; the exact split is pending.</li>
+          <li>A pause counts as safe in the judge's eyes. The price is utility: with rules alone AIS paused about 13% (ToolEmu, unseen) to 15% (ASB) of runs that were fine without it; on unseen ASB tasks, using the benchmark's own labels, it paused 3 of 7 legitimate tasks with rules and 4 of 7 with the semantic check on (only 7 legitimate tasks, so treat this as a rough figure). Pauses on should-refuse tasks went from 9 to 14 of 23, which is the intended effect.</li>
           <li>One model family (Gemini) plays agent, tool emulator and judge in ToolEmu. Agent-SafetyBench uses the benchmark's own tool code instead.</li>
           <li>Sample sizes are modest: 21 to 43 tasks per comparison, one run per arm. Exact tests are reported; treat them as indicative.</li>
           <li>The semantic check reviews actions only. Leaks through read-only calls and the final answer (ASB 0073, 0074) are not caught yet. One known over-block: ASB 0325.</li>
