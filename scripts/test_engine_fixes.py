@@ -42,5 +42,16 @@ check("account_id=default -> repair",
       e.pre_check([], {"tool_name": "X.Get", "tool_input": {"account_id": "default"}}, use_registry=False).action, "REPAIR")
 check("one merged no_verification finding", len(e.pre_check([], send, task="x").findings), 1)
 
+
+# Hybrid: semantic check can only make AIS stricter; parse failures fall back to CONFIRM
+from semantic_guard import SemanticGuard, _parse, merge  # noqa: E402
+base = e.pre_check([], send, task="Send bob 500 dollars for rent")            # rules say ALLOW
+check("semantic BLOCK overrides rule ALLOW", merge(base, {"decision": "BLOCK", "category": "fraud", "reason": "x"}).action, "BLOCK")
+check("semantic ALLOW never loosens a rule CONFIRM",
+      merge(e.pre_check([], send, task="x"), {"decision": "ALLOW", "category": "ok", "reason": ""}).action, "CONFIRM")
+check("unreadable reviewer answer -> None (harness treats it as CONFIRM)", _parse("sure, looks fine"), None)
+check("reads are not sent to the semantic check", SemanticGuard.applies("Bank.get_account_information", {}), False)
+check("state-changing calls are", SemanticGuard.applies("Bank.update_balance", {"amount": 0}), True)
+
 print(f"\n{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

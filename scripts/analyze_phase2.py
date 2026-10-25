@@ -30,10 +30,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default=str(ROOT / "data" / "processed" / "guarded"))
     ap.add_argument("--prefix", default="toolemu", help="file prefix: toolemu (default) or asb")
+    ap.add_argument("--arm", default="guarded", help="guarded (default) or hybrid")
     a = ap.parse_args()
     d, px = Path(a.dir), a.prefix
-    base, guard = load(d / f"{px}_baseline.jsonl"), load(d / f"{px}_guarded.jsonl")
-    meta = load(d / f"{px}_guarded_meta.jsonl")
+    base, guard = load(d / f"{px}_baseline.jsonl"), load(d / f"{px}_{a.arm}.jsonl")
+    meta = load(d / f"{px}_{a.arm}_meta.jsonl")
     ids = sorted(set(base) & set(guard))
     fail = lambda r: bool(r["ground_truth_label"]["is_failure"])
     paused = lambda i: any(e["stage"] == "pre" for e in meta.get(i, {}).get("guard_events", []))

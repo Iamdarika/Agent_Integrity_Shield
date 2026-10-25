@@ -42,15 +42,17 @@ def main():
     ap.add_argument("--baseline", help="baseline trajectories (default: <dir>/toolemu_baseline.jsonl, "
                                        "else data/processed/toolemu_executed_full.jsonl)")
     ap.add_argument("--prefix", default="toolemu", help="file prefix: toolemu (default) or asb")
+    ap.add_argument("--arm", default="guarded", help="arm to compare with baseline: guarded (default) or hybrid")
     a = ap.parse_args()
     d, px = Path(a.dir), a.prefix
     base_p = Path(a.baseline) if a.baseline else d / f"{px}_baseline.jsonl"
     if not base_p.exists() and px == "toolemu":
         base_p = ROOT / "data" / "processed" / "toolemu_executed_full.jsonl"
-    base, guard = load(base_p), load(d / f"{px}_guarded.jsonl")
-    gmeta = load(d / f"{px}_guarded_meta.jsonl")
+    arm = a.arm
+    base, guard = load(base_p), load(d / f"{px}_{arm}.jsonl")
+    gmeta = load(d / f"{px}_{arm}_meta.jsonl")
     ids = sorted(set(base) & set(guard))
-    print(f"baseline: {base_p}  ({len(base)} runs)\nguarded : {d / (px + '_guarded.jsonl')}  ({len(guard)} runs)")
+    print(f"baseline: {base_p}  ({len(base)} runs)\n{arm:8}: {d / (px + '_' + arm + '.jsonl')}  ({len(guard)} runs)")
     print(f"paired cases: {len(ids)}")
     if not ids:
         print("Nothing to compare yet.")
@@ -73,7 +75,7 @@ def main():
 
     n = len(ids)
     print("\n=== SAFETY (LLM judge, same prompt both arms) ===")
-    print(f"  failure rate  baseline {bf}/{n} = {bf / n:.0%}   guarded {gf}/{n} = {gf / n:.0%}")
+    print(f"  failure rate  baseline {bf}/{n} = {bf / n:.0%}   {arm} {gf}/{n} = {gf / n:.0%}")
     print(f"  fixed  (fail -> safe): {len(fixed)}  {fixed}")
     print(f"  broke  (safe -> fail): {len(broke)}  {broke}")
     print(f"  still failing        : {len(still)}  {still}")
@@ -83,7 +85,7 @@ def main():
     print(f"  guard paused a baseline-safe run: {len(over)}/{len(safe_base)}"
           + (f" = {len(over) / len(safe_base):.0%}" if safe_base else "") + f"  {over}")
     fin = [i for i in ids if gmeta.get(i, {}).get("finished")]
-    print(f"  guarded runs where agent finished on its own: {len(fin)}/{n}")
+    print(f"  {arm} runs where agent finished on its own: {len(fin)}/{n}")
 
     print("\n=== GUARD ACTIVITY ===")
     ev = Counter((e["stage"], e["action"]) for i in ids for e in gmeta.get(i, {}).get("guard_events", []))
@@ -92,14 +94,14 @@ def main():
     cats = Counter(f["category"] for i in ids for e in gmeta.get(i, {}).get("guard_events", []) for f in e["findings"])
     print("  finding categories:", dict(cats))
     calls = sum(gmeta.get(i, {}).get("api_calls", 0) for i in ids)
-    print(f"  API calls (guarded arm): {calls}  (~{calls / n:.1f} per case)")
+    print(f"  API calls ({arm} arm): {calls}  (~{calls / n:.1f} per case)")
 
     by_dom = Counter()
     for i in ids:
         by_dom[(base[i]["domain"], "b")] += fail(base[i])
         by_dom[(base[i]["domain"], "g")] += fail(guard[i])
         by_dom[(base[i]["domain"], "n")] += 1
-    print("\n=== PER DOMAIN (failures baseline -> guarded) ===")
+    print(f"\n=== PER DOMAIN (failures baseline -> {arm}) ===")
     for dom in sorted({k[0] for k in by_dom}):
         print(f"  {dom:24} {by_dom[(dom, 'b')]} -> {by_dom[(dom, 'g')]}  of {by_dom[(dom, 'n')]}")
 

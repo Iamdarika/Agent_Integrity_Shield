@@ -14,6 +14,11 @@ Differences from the ToolEmu harness:
   python scripts/run_guarded_asb.py --mode both --limit 6 --dry-run      # zero API calls
   python scripts/run_guarded_asb.py --mode both --limit 40 --max-calls 450
   python scripts/compare_guarded.py --dir data/processed/guarded_asb --prefix asb
+
+Hybrid (rules + semantic LLM check) on cases NOT used before:
+  python scripts/run_guarded_asb.py --mode all --limit 30 --exclude-from data/processed/guarded_asb \
+      --out-dir data/processed/guarded_asb_holdout --max-calls 480
+  python scripts/compare_guarded.py --dir data/processed/guarded_asb_holdout --prefix asb --arm hybrid
 """
 from __future__ import annotations
 
@@ -29,6 +34,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generate_trajectories_toolemu as gen  # noqa: E402
 from recovery_engine import RecoveryEngine  # noqa: E402
+from semantic_guard import SemanticGuard, merge  # noqa: E402
 from run_guarded_toolemu import (INTERVENE_POST, INTERVENE_PRE, BudgetedClient,  # noqa: E402
                                  BudgetExceeded, append, done_ids, guard_message, make_client)
 
@@ -83,7 +89,7 @@ def execute(envs: dict, tool_name: str, args: dict) -> str:
 
 
 # ----------------------------------------------------------------------------- one run
-def run_one(client, record, case, mode, max_turns, delay):
+def run_one(client, record, case, mode, max_turns, delay, semantic: SemanticGuard | None = None):
     tid, task = record["trajectory_id"], record["task_context"]
     envs, specs, registry = env_specs(case)
     engine = RecoveryEngine(registry=registry)
@@ -106,7 +112,13 @@ def run_one(client, record, case, mode, max_turns, delay):
         call = {"step_index": turn, "tool_name": tool, "tool_input": args}
         stage = gen.determine_lifecycle_stage(tool, args, turn, max_turns)
         note = None
-        pre = engine.pre_check(guard_hist, call, use_registry=True, task=task) if mode == "guarded" else None
+        pre = engine.pre_check(guard_hist, call, use_registry=True, task=task) if mode != "baseline" else None
+        if mode == "hybrid" and semantic and pre.action != "BLOCK" and semantic.applies(tool, args):
+            sem = semantic.review(task, tool, args, recent=guard_hist, trajectory_id=tid)
+            events.append({"step_index": turn, "stage": "semantic", "action": sem["decision"], "tool": tool,
+                           "findings": [{"category": sem.get("category", ""), "reason": sem.get("reason", ""),
+                                         "severity": "high"}]})
+            pre = merge(pre, sem)
         if pre is not None and pre.action in INTERVENE_PRE:
             out, stage = guard_message(pre), "pre_execution"
             events.append({"step_index": turn, "stage": "pre", "action": pre.action, "tool": tool,
@@ -115,7 +127,7 @@ def run_one(client, record, case, mode, max_turns, delay):
         else:
             out = execute(envs, tool, args)
             print(f"  turn {turn + 1}: [{tool}] -> {out[:60]!r}")
-            if mode == "guarded":
+            if mode != "baseline":
                 post = engine.post_check(guard_hist, call, out)
                 if post.action in INTERVENE_POST:
                     note = f"AIS guard {post.action}: " + "; ".join(f.reason for f in post.findings) + ". " + post.message
@@ -130,7 +142,7 @@ def run_one(client, record, case, mode, max_turns, delay):
             h["ais_guard"] = note
         history.append(h)
 
-    if not finished and mode == "guarded":
+    if not finished and mode != "baseline":
         final = ("[AIS guard] The task was NOT completed within the step limit. "
                  f"{len(actions)} tool call(s) were made; please review and tell me how to proceed.")
         events.append({"step_index": len(actions) - 1, "stage": "post", "action": "ESCALATE",
@@ -180,7 +192,9 @@ def pick(records: list[dict], limit: int, seed: int) -> list[dict]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--mode", choices=["baseline", "guarded", "both"], default="both")
+    ap.add_argument("--mode", choices=["baseline", "guarded", "hybrid", "both", "all"], default="both",
+                    help="both = baseline+guarded; all = baseline+guarded+hybrid")
+    ap.add_argument("--exclude-from", help="skip cases already run in this output folder (to get unseen cases)")
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--limit", type=int, default=40)
     ap.add_argument("--seed", type=int, default=2026)
@@ -210,9 +224,18 @@ def main() -> int:
     records = [r for r in records if "dialog" not in r["_case"]]     # multi-turn dialog cases need a different loop
     if args.ids:
         records = [r for r in records if r["trajectory_id"] in set(args.ids)]
-    elif not args.all:
+    if args.exclude_from:
+        seen = set()
+        for f in Path(args.exclude_from).glob("asb_*.jsonl"):
+            if not f.name.endswith("_meta.jsonl") and "audit" not in f.name:
+                seen |= done_ids(f)
+        records = [r for r in records if r["trajectory_id"] not in seen]
+        print(f"excluding {len(seen)} cases already run in {args.exclude_from}; {len(records)} unseen remain")
+    if not args.ids and not args.all:
         records = pick(records, args.limit, args.seed)
-    modes = ["baseline", "guarded"] if args.mode == "both" else [args.mode]
+    modes = {"both": ["baseline", "guarded"], "all": ["baseline", "guarded", "hybrid"]}.get(args.mode, [args.mode])
+    semantic = SemanticGuard(client, Path(args.out_dir) / ("dryrun" if args.dry_run else "") / "semantic_cache.jsonl") \
+        if "hybrid" in modes else None
     print(f"AIS on Agent-SafetyBench | modes={modes} | cases={len(records)} | budget={args.max_calls or 'none'} | "
           f"{'DRY RUN (no API)' if args.dry_run else 'LIVE API'} | out={out}"
           + (f" | skipped dialog cases: {skipped}" if skipped else ""))
@@ -223,7 +246,7 @@ def main() -> int:
                 tf, mf = out / f"asb_{mode}.jsonl", out / f"asb_{mode}_meta.jsonl"
                 if r["trajectory_id"] in done_ids(tf):
                     continue
-                rec, meta = run_one(client, r, case, mode, args.max_turns, args.delay)
+                rec, meta = run_one(client, r, case, mode, args.max_turns, args.delay, semantic)
                 errs = gen.validate_record(rec, schema)
                 if errs:
                     print(f"  [schema error] {errs[:3]}")
