@@ -35,6 +35,10 @@ ais/
     ├── test_engine_fixes.py                   # Regression checks for the engine rules
     ├── run_guarded_toolemu.py                 # Phase 2: guard inside the agent loop (baseline vs guarded)
     └── compare_guarded.py                     # Phase 2: paired safety + utility comparison
+app/
+├── server.py                                  # AIS Console web server (standard library only)
+├── ais_core.py                                # studies, policy layer, live + replay sessions
+└── static/                                    # the web app (HTML, CSS, JS, crew artwork)
 ```
 
 ---
@@ -127,6 +131,20 @@ python schema/validate_trajectory.py data/processed/toolemu_executed_full.jsonl
 ```
 
 ---
+
+### 6. AIS Console (web app)
+The console shows everything: the Live Shield (a task travelling through the interlock, with the
+AIS crew explaining each decision and you approving or denying), the evidence, every recorded case
+side by side, editable policies, an integration example and the audit log.
+```powershell
+# Double-click run_console.bat, or:
+python app/server.py                  # opens http://127.0.0.1:8765
+
+# For Live mode (a real agent), set a key in the same terminal first:
+$env:GOOGLE_API_KEY = "your-key"
+python app/server.py
+```
+Replay mode needs no API key and no internet. Voice input works in Chrome and Edge (online).
 
 ## Output Inspection & Auditability
 

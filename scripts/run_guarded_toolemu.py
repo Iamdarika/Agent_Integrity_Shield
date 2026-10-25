@@ -275,6 +275,8 @@ def main() -> int:
                     continue
                 append(traj_f, rec)
                 append(meta_f, meta)
+    except BudgetExceeded as e:
+        print(f"\nSTOPPED: {e}. Finished cases are saved; re-run the same command to resume.")
     except RuntimeError as e:
         if "429" not in str(e):
             raise
