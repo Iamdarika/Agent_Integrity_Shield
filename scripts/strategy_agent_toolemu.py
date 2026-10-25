@@ -673,7 +673,7 @@ class LLMClient:
         return raw_response
 
     def _call_gemini(self, system_prompt: str, user_prompt: str, temperature: float, max_tokens: int) -> tuple[str, int, int]:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
         full_prompt = f"System Instructions:\n{system_prompt}\n\nUser Request:\n{user_prompt}" if system_prompt else user_prompt
         payload = {
             "contents": [{"role": "user", "parts": [{"text": full_prompt}]}],
@@ -685,7 +685,7 @@ class LLMClient:
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key},
             method="POST",
         )
         try:
@@ -1124,6 +1124,7 @@ def main() -> None:
     parser.add_argument("--domain", choices=["financial_transactions", "file_operations", "communication"], default=None, help="Filter by domain.")
     parser.add_argument("--delay", type=float, default=0.5, help="Delay (s) between API calls to avoid rate limits.")
     parser.add_argument("--max-turns", type=int, default=5, help="Max interaction turns per scenario.")
+    parser.add_argument("--force", action="store_true", help="Overwrite existing output file")
     args = parser.parse_args()
 
     api_key = (
@@ -1190,8 +1191,13 @@ def main() -> None:
         confidences.append(conf)
 
     # Write output JSONL
-    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with OUTPUT_FILE.open("w", encoding="utf-8") as f:
+    out_path = OUTPUT_FILE
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if out_path.exists() and not args.force:
+        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_path = out_path.with_name(f"{out_path.stem}_{stamp}{out_path.suffix}")
+        print(f"[!] Output exists, writing to {out_path} instead")
+    with out_path.open("w", encoding="utf-8") as f:
         for rec in executed_records:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 

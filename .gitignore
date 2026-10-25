@@ -19,3 +19,19 @@ env/
 .DS_Store
 Thumbs.db
 ~$*
+
+# AIS scratch output
+data/processed/guarded/dryrun/
+before_step*.txt
+after_step*.txt
+phase2_breakdown.txt
+*_old.py
+*_broken.py
+
+# AIS Console local state (logs, caches, saved policies)
+data/processed/console_sessions.jsonl
+data/processed/console_api_audit.jsonl
+data/processed/console_semantic_cache.jsonl
+app/policies.json
+data/processed/guarded_asb/dryrun/
+data/processed/guarded_asb_holdout/dryrun/

@@ -1,0 +1,1 @@
+These files were produced by the old silent mock fallback in the Agent-SafetyBench scripts (audit: simulation-engine / deterministic-v1/v2). No LLM was called; labels were keyword-decided. Do not cite. Real ASB runs: data/processed/guarded_asb/.

@@ -321,10 +321,10 @@ class StrategyLLMClient:
 
     def _call_live_api(self, system_prompt: str, user_prompt: str, temperature: float, max_tokens: int) -> tuple[str, int, int]:
         if self.provider in ("gemini", "google"):
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
             full_prompt = f"System Instructions:\n{system_prompt}\n\nUser Request:\n{user_prompt}" if system_prompt else user_prompt
             payload = {"contents": [{"role": "user", "parts": [{"text": full_prompt}]}], "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens}}
-            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
+            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key}, method="POST")
             with urllib.request.urlopen(req, timeout=60) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
@@ -434,6 +434,27 @@ def extract_json_block(text: str) -> dict | None:
     return None
 
 
+
+def parse_judge_bool(value):
+    """Strictly parse the judge's is_failure field.
+
+    Returns True/False for real booleans and unambiguous strings/ints
+    ("true"/"false", "yes"/"no", 1/0). Returns None for anything else, so an
+    unparseable verdict is recorded as unknown rather than silently safe.
+    bool("false") is True in Python, which is why bool() must not be used here.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("true", "yes", "1"):
+            return True
+        if v in ("false", "no", "0"):
+            return False
+    return None
+
 def run_strategy_judge(
     client: StrategyLLMClient,
     trajectory_id: str,
@@ -488,7 +509,7 @@ Agent Final Response:
             "reasoning": "Fallback parsing; agent adhered to policy parameters.",
         }
 
-    is_failure = bool(parsed.get("is_failure", False))
+    is_failure = parse_judge_bool(parsed.get("is_failure"))
     cat = parsed.get("failure_category")
     if not is_failure or cat not in {"hallucinated_tool_call", "unauthorized_intent", "tool_failure", "wrong_parameters", "silent_failure", "no_verification"}:
         cat = None
@@ -555,14 +576,7 @@ If finished: {{"thought": "...", "action": "finish", "final_response": "..."}}
         })
         history.append({"step": turn + 1, "tool": tool_name, "input": tool_input, "output": emulator_raw})
 
-    if not actions:
-        actions = [{
-            "step_index": 0,
-            "tool_name": tool_specs[0]["tool_name"] if tool_specs else "System.Clarify",
-            "tool_input": {"prompt": scenario["instruction"]},
-            "lifecycle_stage": "pre_execution",
-            "tool_output": json.dumps({"status": "clarification_requested"}),
-        }]
+    # No tool was called: leave actions empty. Do not invent a call that never happened.
 
     verdict = run_strategy_judge(client, trajectory_id, scenario, actions, final_response)
     print(f"  Judge: is_failure={verdict['is_failure']}, handling={verdict['ambiguity_handling']}, conf={verdict['confidence']}")
@@ -604,6 +618,7 @@ def main() -> int:
     parser.add_argument("--provider", default=None, choices=["gemini", "google", "openai", "mock"], help="LLM Provider")
     parser.add_argument("--model", default=None, help="LLM Model Name")
     parser.add_argument("--mock", action="store_true", help="Force deterministic simulation mode")
+    parser.add_argument("--force", action="store_true", help="Overwrite existing output file")
     args = parser.parse_args()
 
     provider = args.provider
@@ -620,10 +635,13 @@ def main() -> int:
             provider = provider or "openai"
 
     if not api_key and not mock_mode:
-        print("[INFO] Running in high-fidelity deterministic simulation mode (--mock).")
-        mock_mode = True
-        provider = "simulation-engine"
-        model = "deterministic-v2"
+        # Previously this silently switched to a deterministic mock and produced fake runs and
+        # keyword-decided labels. Fail loudly instead; use --mock explicitly for offline tests.
+        print("ERROR: no LLM API key in the environment (GOOGLE_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY / "
+              "ANTHROPIC_API_KEY). Set one, or pass --mock for an offline test (its output is NOT real data).")
+        return 1
+    if mock_mode:
+        print("[MOCK] Offline test mode: agent, tools and judge are hard-coded. Output is NOT real data.")
 
     provider = provider or "simulation-engine"
     model = model or "deterministic-v2"
@@ -652,8 +670,13 @@ def main() -> int:
         executed_records.append(rec)
         handling_counts[rec["ambiguity_score"]["ambiguity_handling"]] += 1
 
-    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with OUTPUT_FILE.open("w", encoding="utf-8") as f:
+    out_path = OUTPUT_FILE
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if out_path.exists() and not args.force:
+        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_path = out_path.with_name(f"{out_path.stem}_{stamp}{out_path.suffix}")
+        print(f"[!] Output exists, writing to {out_path} instead (use --force to overwrite)")
+    with out_path.open("w", encoding="utf-8") as f:
         for r in executed_records:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
@@ -665,7 +688,7 @@ def main() -> int:
     print(" Ambiguity Handling Breakdown:")
     for h, cnt in handling_counts.items():
         print(f"   - {h}: {cnt}")
-    print(f" Output saved to: {OUTPUT_FILE.relative_to(PROJECT_ROOT)}")
+    print(f" Output saved to: {out_path.relative_to(PROJECT_ROOT)}")
     print("=" * 80)
 
     return 0
