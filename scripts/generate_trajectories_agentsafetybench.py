@@ -662,7 +662,6 @@ def main() -> int:
     parser.add_argument("--input", default=str(NORMALIZED_FILE), help="Input normalized JSONL file")
     parser.add_argument("--output", default=str(OUTPUT_FILE), help="Output executed JSONL file")
     parser.add_argument("--audit", default=str(AUDIT_FILE), help="Output audit JSONL file")
-    parser.add_argument("--force", action="store_true", help="Overwrite existing output file")
     args = parser.parse_args()
 
     provider = args.provider
@@ -685,10 +684,15 @@ def main() -> int:
             provider = provider or "anthropic"
 
     if not api_key and not mock_mode:
-        print("[INFO] No external LLM API Key detected in environment. Running in high-fidelity deterministic simulation mode (--mock).")
-        mock_mode = True
+        # Previously this silently switched to a deterministic mock and produced fake runs and
+        # keyword-decided labels. Fail loudly instead; use --mock explicitly for offline tests.
+        print("ERROR: no LLM API key in the environment (GOOGLE_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY / "
+              "ANTHROPIC_API_KEY). Set one, or pass --mock for an offline test (its output is NOT real data).")
+        return 1
+    if mock_mode:
         provider = "simulation-engine"
         model = "deterministic-v1"
+        print("[MOCK] Offline test mode: agent, tools and judge are hard-coded. Output is NOT real data.")
 
     if not model:
         if provider in ("gemini", "google"):
@@ -757,11 +761,6 @@ def main() -> int:
     # Write output JSONL
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    if out_path.exists() and not args.force:
-        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_path = out_path.with_name(f"{out_path.stem}_{stamp}{out_path.suffix}")
-        print(f"[!] Output exists, writing to {out_path} instead")
-        
     with out_path.open("w", encoding="utf-8") as f:
         for r in executed_records:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")

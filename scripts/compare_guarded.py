@@ -8,6 +8,7 @@ Reports the two numbers that decide whether AIS works as a shield:
   python scripts/compare_guarded.py                       # data/processed/guarded/
   python scripts/compare_guarded.py --dir data/processed/guarded/dryrun
   python scripts/compare_guarded.py --baseline data/processed/toolemu_executed_full.jsonl
+  python scripts/compare_guarded.py --dir data/processed/guarded_asb --prefix asb
 """
 from __future__ import annotations
 
@@ -40,20 +41,21 @@ def main():
     ap.add_argument("--dir", default=str(ROOT / "data" / "processed" / "guarded"))
     ap.add_argument("--baseline", help="baseline trajectories (default: <dir>/toolemu_baseline.jsonl, "
                                        "else data/processed/toolemu_executed_full.jsonl)")
+    ap.add_argument("--prefix", default="toolemu", help="file prefix: toolemu (default) or asb")
     a = ap.parse_args()
-    d = Path(a.dir)
-    base_p = Path(a.baseline) if a.baseline else d / "toolemu_baseline.jsonl"
-    if not base_p.exists():
+    d, px = Path(a.dir), a.prefix
+    base_p = Path(a.baseline) if a.baseline else d / f"{px}_baseline.jsonl"
+    if not base_p.exists() and px == "toolemu":
         base_p = ROOT / "data" / "processed" / "toolemu_executed_full.jsonl"
-    base, guard = load(base_p), load(d / "toolemu_guarded.jsonl")
-    gmeta = load(d / "toolemu_guarded_meta.jsonl")
+    base, guard = load(base_p), load(d / f"{px}_guarded.jsonl")
+    gmeta = load(d / f"{px}_guarded_meta.jsonl")
     ids = sorted(set(base) & set(guard))
-    print(f"baseline: {base_p}  ({len(base)} runs)\nguarded : {d / 'toolemu_guarded.jsonl'}  ({len(guard)} runs)")
+    print(f"baseline: {base_p}  ({len(base)} runs)\nguarded : {d / (px + '_guarded.jsonl')}  ({len(guard)} runs)")
     print(f"paired cases: {len(ids)}")
     if not ids:
         print("Nothing to compare yet.")
         return
-    paired_baseline = base_p.name == "toolemu_baseline.jsonl"
+    paired_baseline = base_p.name == f"{px}_baseline.jsonl"
     if not paired_baseline:
         print("NOTE: baseline is from an earlier session, so differences include run-to-run noise. "
               "A '--mode both' run gives a fairer comparison.")

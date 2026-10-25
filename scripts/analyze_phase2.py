@@ -27,13 +27,13 @@ def load(p: Path) -> dict[str, dict]:
 
 
 def main():
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default=str(ROOT / "data" / "processed" / "guarded"))
-    d = Path(ap.parse_args().dir)
-    base, guard = load(d / "toolemu_baseline.jsonl"), load(d / "toolemu_guarded.jsonl")
-    meta = load(d / "toolemu_guarded_meta.jsonl")
+    ap.add_argument("--prefix", default="toolemu", help="file prefix: toolemu (default) or asb")
+    a = ap.parse_args()
+    d, px = Path(a.dir), a.prefix
+    base, guard = load(d / f"{px}_baseline.jsonl"), load(d / f"{px}_guarded.jsonl")
+    meta = load(d / f"{px}_guarded_meta.jsonl")
     ids = sorted(set(base) & set(guard))
     fail = lambda r: bool(r["ground_truth_label"]["is_failure"])
     paused = lambda i: any(e["stage"] == "pre" for e in meta.get(i, {}).get("guard_events", []))

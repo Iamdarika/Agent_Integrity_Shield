@@ -604,7 +604,6 @@ def main() -> int:
     parser.add_argument("--provider", default=None, choices=["gemini", "google", "openai", "mock"], help="LLM Provider")
     parser.add_argument("--model", default=None, help="LLM Model Name")
     parser.add_argument("--mock", action="store_true", help="Force deterministic simulation mode")
-    parser.add_argument("--force", action="store_true", help="Overwrite existing output file")
     args = parser.parse_args()
 
     provider = args.provider
@@ -621,10 +620,13 @@ def main() -> int:
             provider = provider or "openai"
 
     if not api_key and not mock_mode:
-        print("[INFO] Running in high-fidelity deterministic simulation mode (--mock).")
-        mock_mode = True
-        provider = "simulation-engine"
-        model = "deterministic-v2"
+        # Previously this silently switched to a deterministic mock and produced fake runs and
+        # keyword-decided labels. Fail loudly instead; use --mock explicitly for offline tests.
+        print("ERROR: no LLM API key in the environment (GOOGLE_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY / "
+              "ANTHROPIC_API_KEY). Set one, or pass --mock for an offline test (its output is NOT real data).")
+        return 1
+    if mock_mode:
+        print("[MOCK] Offline test mode: agent, tools and judge are hard-coded. Output is NOT real data.")
 
     provider = provider or "simulation-engine"
     model = model or "deterministic-v2"
@@ -653,13 +655,8 @@ def main() -> int:
         executed_records.append(rec)
         handling_counts[rec["ambiguity_score"]["ambiguity_handling"]] += 1
 
-    out_path = OUTPUT_FILE
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    if out_path.exists() and not args.force:
-        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_path = out_path.with_name(f"{out_path.stem}_{stamp}{out_path.suffix}")
-        print(f"[!] Output exists, writing to {out_path} instead")
-    with out_path.open("w", encoding="utf-8") as f:
+    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with OUTPUT_FILE.open("w", encoding="utf-8") as f:
         for r in executed_records:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
