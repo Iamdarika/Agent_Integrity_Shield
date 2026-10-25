@@ -142,7 +142,7 @@ class LLMClient:
         return raw_response
 
     def _call_gemini(self, system_prompt: str, user_prompt: str, temperature: float, max_tokens: int) -> tuple[str, int, int]:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
         full_prompt = f"System Instructions:\n{system_prompt}\n\nUser Request:\n{user_prompt}" if system_prompt else user_prompt
         payload = {
             "contents": [{"role": "user", "parts": [{"text": full_prompt}]}],
@@ -154,7 +154,7 @@ class LLMClient:
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key},
             method="POST",
         )
         try:
