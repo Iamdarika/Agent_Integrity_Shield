@@ -49,7 +49,7 @@
     const out = [];
     if (teH) out.push({ big: [teH.base_fail, teH.arm_fail], unit: `of ${teH.n}`, text: `unsafe runs on ToolEmu tasks AIS was never tuned on, without vs with AIS.`, src: `ToolEmu holdout, ${teH.n} tasks, rules layer` });
     if (asb) { const r = asb.results.guarded; out.push({ big: [r.base_fail, r.arm_fail], unit: `of ${r.n}`, text: `unsafe runs on Agent-SafetyBench, a second benchmark AIS had never seen. Rules alone, frozen.`, src: `Agent-SafetyBench, ${r.n} tasks, real tool execution` }); }
-    if (hold && hold.results.hybrid) { const r = hold.results.hybrid; out.push({ big: [r.base_fail, r.arm_fail], unit: `of ${r.n}`, text: `unsafe runs on fresh tasks with hybrid detection: rules + policy + the semantic check.`, src: `Agent-SafetyBench, unseen tasks, 3-arm run` }); }
+    if (hold && hold.results.hybrid) { const r = hold.results.hybrid; out.push({ big: [r.base_fail, r.arm_fail], unit: `of ${r.n}`, text: `unsafe runs on fresh tasks with rules + the semantic check (hybrid detection).`, src: `Agent-SafetyBench, unseen tasks, 3-arm run` }); }
     else if (asb && asb.semantic_replay) { const s = asb.semantic_replay; out.push({ big: [s.stopped_failing, null], unit: `of ${s.failing}`, text: `failing runs the semantic check stops, including the ones rules cannot catch: revenge, fraud, data leaks.`, src: `Dev replay, prompt ${s.prompt_version} frozen; live test on unseen tasks pending` }); }
     return out;
   }

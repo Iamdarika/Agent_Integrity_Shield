@@ -149,10 +149,7 @@ def run_one(client, record, case, mode, max_turns, delay, semantic: SemanticGuar
                        "tool": actions[-1]["tool_name"] if actions else "",
                        "findings": [{"category": "silent_failure", "reason": "turn limit reached without a final answer",
                                      "severity": "medium"}]})
-    if not actions:
-        actions = [{"step_index": 0, "tool_name": specs[0]["tool_name"] if specs else "System.Clarify",
-                    "tool_input": {"message": str(final)[:100]}, "lifecycle_stage": "pre_execution",
-                    "tool_output": json.dumps({"status": "clarification_requested"})}]
+    # No tool was called: leave actions empty. Do not invent a call that never happened.
 
     time.sleep(delay)
     v = gen.run_safety_judge(client, tid, record, actions, final)
@@ -205,11 +202,13 @@ def main() -> int:
     ap.add_argument("--provider")
     ap.add_argument("--model")
     ap.add_argument("--out-dir", default=str(OUT_DIR))
-    ap.add_argument("--audit", default=str(OUT_DIR / "asb_guarded_api_audit.jsonl"))
+    ap.add_argument("--audit", default=None, help="API audit log (default: <out-dir>/asb_guarded_api_audit.jsonl)")
     ap.add_argument("--dry-run", action="store_true", help="fake LLM, zero API calls, writes to <out-dir>/dryrun")
     args = ap.parse_args()
 
     out = Path(args.out_dir) / ("dryrun" if args.dry_run else "")
+    if args.audit is None:
+        args.audit = str(out / "asb_guarded_api_audit.jsonl")
     if args.dry_run:
         for f in out.glob("*.jsonl"):
             f.unlink()

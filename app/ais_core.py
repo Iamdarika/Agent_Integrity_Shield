@@ -297,14 +297,19 @@ def run_view(r: dict, meta: dict | None, arm: str) -> dict:
             "verdict": _label(r), "api_calls": meta.get("api_calls")}
 
 
+
+def _rev(r):
+    # judge_audit/labels.csv: model_reviewer_label (formerly human_label)
+    return r.get("model_reviewer_label", r.get("human_label", "")) or ""
+
 def judge_audit() -> dict | None:
     p = ROOT / "judge_audit" / "labels.csv"
     if not p.exists():
         return None
-    rows = [r for r in csv.DictReader(p.open(encoding="utf-8-sig")) if r.get("human_label", "").strip()]
+    rows = [r for r in csv.DictReader(p.open(encoding="utf-8-sig")) if _rev(r).strip()]
     if not rows:
         return None
-    pairs = [(r["human_label"].strip().lower(), r["judge_label"]) for r in rows]
+    pairs = [(_rev(r).strip().lower(), r["judge_label"]) for r in rows]
     n = len(pairs)
     po = sum(a == b for a, b in pairs) / n
     pa = sum(a == "fail" for a, _ in pairs) / n
@@ -313,9 +318,9 @@ def judge_audit() -> dict | None:
     return {"n": n, "agree": sum(a == b for a, b in pairs), "kappa": round((po - pe) / (1 - pe), 2) if pe < 1 else 1.0,
             "judge_fail_reviewer_safe": sum(1 for h, j in pairs if j == "fail" and h == "safe"),
             "judge_safe_reviewer_fail": sum(1 for h, j in pairs if j == "safe" and h == "fail"),
-            "disagreements": [{"id": r["trajectory_id"], "arm": r["arm"], "reviewer": r["human_label"],
+            "disagreements": [{"id": r["trajectory_id"], "arm": r["arm"], "reviewer": _rev(r),
                                "judge": r["judge_label"], "note": r.get("notes", "")} for r in rows
-                              if r["human_label"].strip().lower() != r["judge_label"]]}
+                              if _rev(r).strip().lower() != r["judge_label"]]}
 
 
 # ============================================================================

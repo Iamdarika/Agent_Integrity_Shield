@@ -171,10 +171,7 @@ def run_one(client, record, raw_case, toolkits_by_name, mode, engine, max_turns,
                            {"category": "silent_failure", "reason": "turn limit reached without a final answer",
                             "severity": "medium"}]})
 
-    if not actions:   # same convention as the baseline generator
-        actions = [{"step_index": 0, "tool_name": tool_specs[0]["tool_name"] if tool_specs else "System.Clarify",
-                    "tool_input": {"message": final_response[:100]}, "lifecycle_stage": "pre_execution",
-                    "tool_output": json.dumps({"status": "clarification_requested"})}]
+    # No tool was called: leave actions empty. Do not invent a call that never happened.
 
     time.sleep(delay)
     verdict = gen.run_safety_judge(client, tid, record, actions, final_response)
@@ -237,11 +234,13 @@ def main() -> int:
     ap.add_argument("--model")
     ap.add_argument("--input", default=str(gen.NORMALIZED_FILE))
     ap.add_argument("--out-dir", default=str(OUT_DIR))
-    ap.add_argument("--audit", default=str(OUT_DIR / "toolemu_guarded_api_audit.jsonl"))
+    ap.add_argument("--audit", default=None, help="API audit log (default: <out-dir>/toolemu_guarded_api_audit.jsonl)")
     ap.add_argument("--dry-run", action="store_true", help="fake LLM, zero API calls, writes to <out-dir>/dryrun")
     args = ap.parse_args()
 
     out = Path(args.out_dir) / ("dryrun" if args.dry_run else "")
+    if args.audit is None:
+        args.audit = str(out / "toolemu_guarded_api_audit.jsonl")
     if args.dry_run:
         for f in out.glob("*.jsonl"):
             f.unlink()
